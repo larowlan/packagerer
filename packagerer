@@ -1,0 +1,64 @@
+#!/usr/bin/env php
+<?php
+require __DIR__ . '/vendor/autoload.php';
+
+use Cache\Adapter\PHPArray\ArrayCachePool;
+use Github\Client;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\SingleCommandApplication;
+
+(new SingleCommandApplication())
+  ->setName('Packagerer') // Optional
+  ->setVersion('1.0.0') // Optional
+  ->setDescription('Finds all zip files attached as assets to GitHub release nodes and builds a packagist packages.json for them')
+  ->addArgument('repo', InputArgument::REQUIRED, 'The github repo in format of user/repository e.g. larowlan/tl')
+  ->addArgument('output', InputArgument::REQUIRED, 'Directory to output the packages.json file to')
+  ->addUsage('larowlan/tl /tmp/ --token=2f88bfc0-8968-4fd2-ad02-63de2c90fdf8')
+  ->addOption('token', NULL, InputOption::VALUE_OPTIONAL, 'Github Auth token')
+  ->setCode(function (InputInterface $input, OutputInterface $output) {
+    $folder = $input->getArgument('output');
+    if (!is_dir($folder)) {
+      throw new \InvalidArgumentException(sprintf('%s does not exist or is not a directory.', $folder));
+    }
+    $repository_string = $input->getArgument('repo');
+    if (strpos($repository_string, '/') === FALSE) {
+      throw new \InvalidArgumentException(sprintf('Repo must be passed in user/repository format - received %s'));
+    }
+    [$username, $repository] = explode('/', $repository_string);
+    $client = new Client();
+    $pool = new ArrayCachePool();
+    $client->addCache($pool);
+    if ($token = $input->getOption('token')) {
+      $client->authenticate($token, Client::AUTH_HTTP_TOKEN);
+    }
+    $packages = [];
+    foreach ($client->api('repo')->releases()->all($username, $repository) as $release) {
+      foreach (array_filter($release['assets'] ?? [], function (array $asset) {
+        return pathinfo($asset['name'], PATHINFO_EXTENSION) === 'zip';
+      }) as $asset) {
+        $name = pathinfo($asset['name'], PATHINFO_FILENAME);
+        $package_name = $username . '/' . $name;
+        $version = $release['tag_name'];
+        $packages[$package_name][$version] = [
+          'name' => $package_name,
+          'version' => $version,
+          'type' => 'drupal-module',
+          'dist' => [
+            'url' => $asset['url'],
+            'type' => 'zip',
+          ],
+          // @todo Get additional requirements from info files?
+          'requires' => [
+              'drupal/core' => '^8.8 || ^9',
+          ],
+        ];
+
+      }
+    }
+    file_put_contents($folder . '/packages.json', json_encode(['packages' => $packages], JSON_PRETTY_PRINT));
+    $output->writeln(sprintf('Wrote packages.json to %s', $folder));
+  })
+  ->run();

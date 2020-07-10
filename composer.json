@@ -1,0 +1,25 @@
+{
+    "name": "larowlan/packagerer",
+    "description": "Reads github release nodes to build a composer packagist repository file",
+    "type": "library",
+    "require": {
+        "symfony/console": "^5.1",
+        "cache/array-adapter": "^1.0",
+        "knplabs/github-api": "^2.14",
+        "php-http/guzzle6-adapter": "^1.1",
+        "ext-json": "*"
+    },
+    "license": "GPL-2+",
+    "authors": [
+        {
+            "name": "Lee Rowlands",
+            "email": "lee.rowlands@previousnext.com.au"
+        }
+    ],
+    "require-dev": {
+        "clue/phar-composer": "^1.1"
+    },
+    "bin": [
+        "packagerer"
+    ]
+}
